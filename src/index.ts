@@ -1247,10 +1247,20 @@ function processAssistantMessage(message: SDKMessage, model: Model<any>, customT
 		if (!id || !c.turnStreamMessageId || id === c.turnStreamMessageId) return;
 		if (c.turnStreamOpen) dropAbandonedStreamBlocks(c, `non-streaming fallback ${id}`);
 	}
+	// CC delivers an API failure's message as a synthetic assistant message before
+	// the errored result. Streaming that text as content makes consumers that
+	// commit on the first content event (pi-model-fallback-alias) treat the later
+	// error as non-retryable, so keep the text in the turn record but emit no
+	// content events; the terminal error event carries it.
+	const isSyntheticErrorText = assistantMsg.model === "<synthetic>";
 	c.turnToolCallIds = [];
-	debug(`processAssistantMessage fallback: ${assistantMsg.content.length} blocks, types=${assistantMsg.content.map((b: any) => b.type).join(",")}`);
+	debug(`processAssistantMessage fallback: ${assistantMsg.content.length} blocks, types=${assistantMsg.content.map((b: any) => b.type).join(",")}${isSyntheticErrorText ? " (synthetic)" : ""}`);
 	for (const block of assistantMsg.content) {
 		if (block.type === "text" && block.text) {
+			if (isSyntheticErrorText) {
+				c.turnBlocks.push({ type: "text", text: block.text });
+				continue;
+			}
 			ensureTurnStarted(c);
 			c.turnBlocks.push({ type: "text", text: block.text });
 			const idx = c.turnBlocks.length - 1;
