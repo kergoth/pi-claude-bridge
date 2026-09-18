@@ -1,6 +1,6 @@
 /**
  * CC reports API failures (429 capacity, overload, prompt-too-long) as a result with
- * is_error set while subtype stays "success", after streaming the text as a <synthetic>
+ * is_error set while subtype stays "success", after delivering the text as a <synthetic>
  * assistant message. The result shape (is_error with subtype "success") is pinned
  * live against the installed SDK in tests/int-cc-contracts.mjs. Without this the
  * turn finalizes as a normal stop and the failure never reaches pi.
@@ -118,7 +118,7 @@ describe("error results", () => {
 		assert.strictEqual(terminal.error.errorMessage, errorResult.result);
 	});
 
-	it("does not re-emit text the synthetic assistant message already delivered", async () => {
+	it("does not stream synthetic error text as content events", async () => {
 		const c = makeCtx();
 		await consume(c, [
 			{ type: "assistant", message: { model: "<synthetic>", content: [{ type: "text", text: errorResult.result }] } },
@@ -127,6 +127,24 @@ describe("error results", () => {
 
 		const texts = c.turnOutput.content.filter((b) => b.type === "text");
 		assert.deepStrictEqual(texts.map((b) => b.text), [errorResult.result]);
+
+		const stream = c.currentPiStream;
+		__test.finalizeCurrentStream(c, c.turnOutput.stopReason);
+		assert.strictEqual(stream.events.at(-2).type, "error");
+		assert.strictEqual(stream.events.at(-2).error.errorMessage, errorResult.result);
+		assert.ok(!stream.events.some((e) => e.type === "text_start" || e.type === "text_delta" || e.type === "text_end"));
+	});
+
+	it("still streams normal assistant text", async () => {
+		const c = makeCtx();
+		await consume(c, [
+			{ type: "assistant", message: { model: "claude-haiku-4-5-20251001", content: [{ type: "text", text: "hello" }] } },
+		]);
+
+		assert.deepStrictEqual(
+			c.currentPiStream.events.filter((e) => e.type.startsWith("text_")).map((e) => e.type),
+			["text_start", "text_delta", "text_end"],
+		);
 	});
 
 	it("still streams and finalizes a successful result normally", async () => {

@@ -1,5 +1,9 @@
 # Changelog
 
+## UNRELEASED
+
+- **Fix: synthetic error text no longer streams as content** — Claude Code delivers API failures (rate limits, out-of-usage, prompt-too-long) as a `<synthetic>` assistant message before the errored result. Streaming that text as `text_*` events caused consumers like `pi-model-fallback-alias` to commit on the first content event and treat the subsequent `error` event as a non-retryable `committed-failure`; the text is now kept in the turn record but emitted only through the terminal `error` event, so model aliases fall through to their next target.
+
 ## 0.9.1 — 2026-09-30
 
 - **Bump: Claude Sonnet 5.5 and pi-ai 0.99.1** — pi-ai update brings `claude-sonnet-5-5` with 1M context. Agent SDK now requires `^0.3.284`.
