@@ -6,6 +6,7 @@
 - **Fix: queued steering keeps MCP input open through later turns (#172)** — Keep Claude Code's input open until each steer is replayed into a turn, then close after that turn completes. An error result still ends the query, so a steer Claude Code had queued can no longer run on and replace the failure. Thanks @Maverobot.
 - **Fix: abort ignored after a terminated tool batch (#200, issue #199)** — when a run ended with Claude Code's query parked at a tool call (`terminate: true`), aborting the next run did nothing. Each run that continues the query now binds its own signal. Thanks @orshih6 and @cootue.
 - **Fix: teardown rewrote a finished tool-call turn (issue #181)** — an abort, crash or error after a turn ended on a tool call changed pi's copy of that message to aborted/error, which could later orphan its tool result on Codex. Thanks @good-nightmoon.
+- **Add: `provider.contextCap` registers a lower context window per model** — Pi compacts when context exceeds the registered window minus its reserve, so a 1M model otherwise compacts near 984K. `contextCap` (model id to token count) keeps the `[1m]` request but registers the cap, so compaction starts earlier; `forceTwoHundredK` only offered 200K. The "1M" label now appears only when the registered window is exactly 1M.
 
 ## 0.9.3 — 2026-10-13
 
