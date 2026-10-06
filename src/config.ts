@@ -35,6 +35,9 @@ export interface Config {
 		// Model ids (e.g. "claude-future-9") whose declared 1M context Claude Code
 		// does not actually serve; pins them to the bare id at 200K.
 		forceTwoHundredK?: string[];
+		// Per-model ceiling (tokens) on the window pi registers, e.g.
+		// { "claude-sonnet-5-5": 272000 }. Makes pi compact earlier than the served window.
+		contextCap?: Record<string, number>;
 	};
 }
 

@@ -9,7 +9,7 @@ import { appendFileSync, mkdirSync, realpathSync, statSync } from "fs";
 import { dirname, join } from "path";
 import { PROVIDER_ID, messageContentToText, convertPiMessages } from "./convert.js";
 import { DEBUG_LOG_PATH, DIAG_LOG_PATH } from "./log-paths.js";
-import { applyLongContext, buildModels, claudeCodeModelId, type LongContextSettings, resolveModel as _resolveModel } from "./models.js";
+import { applyLongContext, buildModels, claudeCodeModelId, type LongContextSettings, parseContextCap, resolveModel as _resolveModel } from "./models.js";
 import { MCP_SERVER_NAME, MCP_TOOL_PREFIX, renderSkillsBlock } from "./skills.js";
 import { verifyWrittenSession as _verifyWrittenSession } from "./session-verify.js";
 import { extractAllToolResults as _extractAllToolResults, type McpResult } from "./extract-tool-results.js";
@@ -2393,6 +2393,7 @@ export default function (pi: ExtensionAPI) {
 		plan: providerSettings.plan ?? "pro",
 		longContextExtraUsage: providerSettings.longContextExtraUsage ?? false,
 		forceTwoHundredK,
+		contextCap: parseContextCap(providerSettings.contextCap),
 	};
 	const registeredModels = applyLongContext(MODELS, longContextSettings);
 	if (registeredModels.length === 0) {

@@ -7,7 +7,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { applyLongContext, buildModels, claudeCodeModelId, resolveClaudeCodeRuntimeModel, resolveModel } from "../src/models.js";
+import { applyLongContext, buildModels, claudeCodeModelId, parseContextCap, resolveClaudeCodeRuntimeModel, resolveModel } from "../src/models.js";
 import { getModels } from "@earendil-works/pi-ai/compat";
 
 const PRO = { plan: "pro", longContextExtraUsage: false };
@@ -187,6 +187,46 @@ describe("applyLongContext", () => {
 
 		const extra = applyLongContext(models, EXTRA);
 		assert.equal(find(extra, "claude-sonnet-4-6").name, "Claude Sonnet 4.6 1M");
+	});
+});
+
+describe("contextCap", () => {
+	const SONNET = oneM("claude-sonnet-5-5");
+
+	it("lowers the registered window and keeps the [1m] request id", () => {
+		assert.deepEqual(
+			resolveClaudeCodeRuntimeModel(SONNET, { ...PRO, contextCap: { "claude-sonnet-5-5": 272000 } }),
+			{ cliModelId: "claude-sonnet-5-5[1m]", contextWindow: 272000 },
+		);
+	});
+
+	it("never raises a window and ignores other models", () => {
+		assert.equal(resolveClaudeCodeRuntimeModel(mockPiAiModel("claude-haiku-4-5"), { ...PRO, contextCap: { "claude-haiku-4-5": 272000 } }).contextWindow, 200000);
+		assert.equal(resolveClaudeCodeRuntimeModel(SONNET, { ...PRO, contextCap: { "claude-opus-5-5": 272000 } }).contextWindow, 1000000);
+		assert.equal(resolveClaudeCodeRuntimeModel(SONNET, { ...PRO, contextCap: { "claude-sonnet-5-5": 2000000 } }).contextWindow, 1000000);
+	});
+
+	it("composes with forceTwoHundredK as the lower of the two", () => {
+		assert.deepEqual(
+			resolveClaudeCodeRuntimeModel(SONNET, { ...PRO, forceTwoHundredK: ["claude-sonnet-5-5"], contextCap: { "claude-sonnet-5-5": 272000 } }),
+			{ cliModelId: "claude-sonnet-5-5", contextWindow: 200000 },
+		);
+	});
+
+	it("labels 1M only when the registered window is 1M", () => {
+		const models = buildModels(getModels("anthropic"));
+		const capped = applyLongContext(models, { ...PRO, contextCap: { "claude-opus-5": 272000 } });
+		assert.equal(find(capped, "claude-opus-5").contextWindow, 272000);
+		assert.equal(find(capped, "claude-opus-5").name, "Claude Opus 5");
+		assert.equal(find(applyLongContext(models, PRO), "claude-opus-5").name, "Claude Opus 5 1M");
+	});
+
+	it("parseContextCap keeps only positive integer entries", () => {
+		assert.deepEqual(parseContextCap({ a: 272000, b: 0, c: -1, d: 1.5, e: "9", f: null }), { a: 272000 });
+		assert.equal(parseContextCap({ b: 0 }), undefined);
+		assert.equal(parseContextCap(["claude-sonnet-5-5"]), undefined);
+		assert.equal(parseContextCap("272000"), undefined);
+		assert.equal(parseContextCap(undefined), undefined);
 	});
 });
 

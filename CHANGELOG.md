@@ -2,6 +2,7 @@
 
 ## UNRELEASED
 
+- **Add: `provider.contextCap` registers a lower context window per model** — Pi compacts when context exceeds the registered window minus its reserve, so a 1M model otherwise compacts near 984K. `contextCap` (model id to token count) keeps the `[1m]` request but registers the cap, so compaction starts earlier; `forceTwoHundredK` only offered 200K. The "1M" label now appears only when the registered window is exactly 1M.
 - **Fix: synthetic error text no longer streams as content** — Claude Code delivers API failures (rate limits, out-of-usage, prompt-too-long) as a `<synthetic>` assistant message before the errored result. Streaming that text as `text_*` events caused consumers like `pi-model-fallback-alias` to commit on the first content event and treat the subsequent `error` event as a non-retryable `committed-failure`; the text is now kept in the turn record but emitted only through the terminal `error` event, so model aliases fall through to their next target.
 
 ## 0.9.1 — 2026-09-30

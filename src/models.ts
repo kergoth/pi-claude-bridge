@@ -61,6 +61,10 @@ export type LongContextSettings = {
 	// Model ids whose declared 1M context Claude Code turned out not to serve;
 	// forces bare id at 200K without a code change.
 	forceTwoHundredK?: string[];
+	// Per-model ceiling on the registered window, in tokens. The [1m] id is still
+	// requested; only pi's status bar and compaction threshold see the lower
+	// window. A cap at or above the served window has no effect.
+	contextCap?: Record<string, number>;
 };
 
 export type ClaudeCodeRuntimeModel = {
@@ -75,7 +79,9 @@ export type ClaudeCodeRuntimeModel = {
 //   — worse than serving 200K, so the default is bare id at 200K and only
 //   measured-good ids get `[1m]`.
 // - The registered contextWindow must match the window the bridge actually
-//   requests, or pi's status bar and compaction threshold misreport.
+//   requests, or pi's status bar and compaction threshold misreport. The one
+//   deliberate exception is an explicit contextCap, which registers lower so pi
+//   compacts earlier than the served window.
 // [1m] ids verified to serve 1M on every plan (sonnet-5-5 measured on Pro with
 // and without Extra Usage; opus-5-5 on Max per its run notes). A new model
 // serves 200K until someone measures it (diag/context-size.mjs) and adds it
@@ -102,6 +108,23 @@ const PLAN_GATED_ONE_M: Record<string, (settings: LongContextSettings) => boolea
 };
 
 export function resolveClaudeCodeRuntimeModel(
+	model: { id: string },
+	settings: LongContextSettings,
+): ClaudeCodeRuntimeModel {
+	const served = resolveServedModel(model, settings);
+	const cap = settings.contextCap?.[model.id];
+	return cap !== undefined && cap < served.contextWindow ? { ...served, contextWindow: cap } : served;
+}
+
+// Keep only entries pi can use as a window: positive safe integers keyed by
+// model id. Anything else is dropped so a bad config cannot break activation.
+export function parseContextCap(raw: unknown): Record<string, number> | undefined {
+	if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return undefined;
+	const entries = Object.entries(raw).filter(([, v]) => typeof v === "number" && Number.isSafeInteger(v) && v > 0);
+	return entries.length > 0 ? Object.fromEntries(entries) as Record<string, number> : undefined;
+}
+
+function resolveServedModel(
 	model: { id: string },
 	settings: LongContextSettings,
 ): ClaudeCodeRuntimeModel {
@@ -157,7 +180,7 @@ export function applyLongContext<T extends { id: string; name: string; contextWi
 ): T[] {
 	return models.map((m) => {
 		const { contextWindow } = resolveClaudeCodeRuntimeModel(m, settings);
-		const name = contextWindow > TWO_HUNDRED_K_CONTEXT && !/\b1M\b/i.test(m.name) ? `${m.name} 1M` : m.name;
+		const name = contextWindow === ONE_M_CONTEXT && !/\b1M\b/i.test(m.name) ? `${m.name} 1M` : m.name;
 		return contextWindow === m.contextWindow && name === m.name ? m : { ...m, contextWindow, name };
 	});
 }
