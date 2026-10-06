@@ -1,5 +1,9 @@
 # Changelog
 
+## UNRELEASED
+
+- **Add: `provider.contextCap` registers a lower context window per model** — Pi compacts when context exceeds the registered window minus its reserve, so a 1M model otherwise compacts near 984K. `contextCap` (model id to token count) keeps the `[1m]` request but registers the cap, so compaction starts earlier; `forceTwoHundredK` only offered 200K. The "1M" label now appears only when the registered window is exactly 1M.
+
 ## 0.9.3 — 2026-10-13
 
 - **Remove: compaction and branch-summary takeovers (#189)** — pi runs them natively; the bridge routes summary calls to its isolated path. Other compaction extensions should now work. Resolves #115. Thanks @sonSunnoi.
