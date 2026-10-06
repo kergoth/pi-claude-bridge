@@ -66,6 +66,31 @@ describe("resultErrorText", () => {
 const RETRYABLE = /rate\s*limit/i;
 const TOOL_FAILURE_PREFIX = /^[\w.:@/-]+ failed (?:(?:\(exit \d+\):)|(?:with exit code \d+))(?:\s|$)/i;
 
+describe("rate-limit event publication", () => {
+	for (const info of [
+		{ status: "allowed", utilization: 0.2, rateLimitType: "five_hour", resetsAt: 1786141800 },
+		{ status: "allowed_warning", utilization: 0.96, rateLimitType: "seven_day", resetsAt: 1786141800 },
+		{ status: "rejected", rateLimitType: "five_hour", resetsAt: 1786141800 },
+	]) {
+		it(`publishes sanitized ${info.status} data`, async () => {
+			const emitted = [];
+			__test.setPiEvents({ emit: (channel, data) => emitted.push({ channel, data }) });
+			try {
+				await consume(makeCtx(), [{ type: "rate_limit_event", rate_limit_info: { ...info, account: "private", utilization: info.utilization } }]);
+				assert.deepStrictEqual(emitted, [{ channel: "claude-bridge/rate-limit/v1", data: info }]);
+			} finally { __test.setPiEvents(null); }
+		});
+	}
+
+	it("ignores malformed rate-limit data", async () => {
+		const emitted = [];
+		__test.setPiEvents({ emit: (...args) => emitted.push(args) });
+		try { await consume(makeCtx(), [{ type: "rate_limit_event", rate_limit_info: { status: "other", utilization: "secret" } }]); }
+		finally { __test.setPiEvents(null); }
+		assert.deepStrictEqual(emitted, []);
+	});
+});
+
 describe("a rate-limited failure", () => {
 	// Claude Code words a subscription limit with none of the vocabulary anyone matches on,
 	// and sends the rejection as its own message just before the failure it caused.
