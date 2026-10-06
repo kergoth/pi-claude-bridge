@@ -885,6 +885,9 @@ export const __test = {
 	setPiUI(ui: ExtensionUIContext | null) {
 		piUI = ui;
 	},
+	setPiEvents(events: { emit(channel: string, data: unknown): void } | null) {
+		piEvents = events;
+	},
 	toBridgeContext,
 	isolatedStreamFn,
 	effortForReasoning,
@@ -959,6 +962,7 @@ function mapToolArgs(
 
 // Global (not query state):
 let piUI: ExtensionUIContext | null = null;
+let piEvents: { emit(channel: string, data: unknown): void } | null = null;
 let piMode: ExtensionContext["mode"] | null = null;
 const activeQueryContexts = new Set<QueryContext>();
 
@@ -1529,6 +1533,15 @@ async function consumeQuery(
 		if (message.type === "rate_limit_event") {
 			const info = (message as any).rate_limit_info;
 			debug("consumeQuery: rate_limit_event", JSON.stringify(info).slice(0, 300));
+			if (["allowed", "allowed_warning", "rejected"].includes(info?.status)) {
+				const normalized = {
+					status: info.status,
+					...(Number.isFinite(info.utilization) ? { utilization: info.utilization } : {}),
+					...(typeof info.rateLimitType === "string" ? { rateLimitType: info.rateLimitType } : {}),
+					...(Number.isFinite(info.resetsAt) ? { resetsAt: info.resetsAt } : {}),
+				};
+				piEvents?.emit("claude-bridge/rate-limit/v1", normalized);
+			}
 			if (info) queryCtx.heldRateLimit = info;
 			await reportHeldRateLimit(queryCtx, model);
 			if (info?.status === "rejected") {
@@ -2414,6 +2427,7 @@ const PREVIEW_MAX_LINES = 6;
 let askClaudeToolName = "AskClaude";
 
 export default function (pi: ExtensionAPI) {
+	piEvents = pi.events;
 	// Disable non-essential Claude Code traffic (update checks, MCP registry, telemetry)
 	process.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
 
