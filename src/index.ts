@@ -515,6 +515,19 @@ function resultErrorText(message: SDKMessage): string | undefined {
 	return `Claude Code failed: ${result.subtype ?? "unknown result"}`;
 }
 
+// Account-wide utilization for every window the SDK reports, so consumers see the weekly
+// cap on turns whose headline rateLimitType is the five-hour window. Only plain numbers
+// are copied out; the rest of unifiedWindows is not ours to publish.
+function normalizeUnifiedWindows(raw: unknown): Record<string, { utilization: number; resetsAt?: number }> | undefined {
+	if (!raw || typeof raw !== "object") return undefined;
+	const out: Record<string, { utilization: number; resetsAt?: number }> = {};
+	for (const [id, w] of Object.entries(raw as Record<string, any>)) {
+		if (!Number.isFinite(w?.utilization)) continue;
+		out[id] = { utilization: w.utilization, ...(Number.isFinite(w.resetsAt) ? { resetsAt: w.resetsAt } : {}) };
+	}
+	return Object.keys(out).length ? out : undefined;
+}
+
 /** Name a failure as a rate limit when a rejection preceded it.
  *
  *  pi has no typed rate-limit error — `stopReason` is only ever `"error"` and the sole carrier
@@ -1561,7 +1574,8 @@ async function consumeQuery(
 					...(typeof info.rateLimitType === "string" ? { rateLimitType: info.rateLimitType } : {}),
 					...(Number.isFinite(info.resetsAt) ? { resetsAt: info.resetsAt } : {}),
 				};
-				piEvents?.emit("claude-bridge/rate-limit/v1", normalized);
+				const windows = normalizeUnifiedWindows(info.unifiedWindows);
+				piEvents?.emit("claude-bridge/rate-limit/v1", windows ? { ...normalized, windows } : normalized);
 			}
 			if (info) queryCtx.heldRateLimit = info;
 			await reportHeldRateLimit(queryCtx, model);
