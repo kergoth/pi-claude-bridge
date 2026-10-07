@@ -82,6 +82,28 @@ describe("rate-limit event publication", () => {
 		});
 	}
 
+	it("publishes every unified window and drops everything else in it", async () => {
+		const emitted = [];
+		__test.setPiEvents({ emit: (channel, data) => emitted.push({ channel, data }) });
+		const info = {
+			status: "allowed", utilization: 0.14, rateLimitType: "five_hour", resetsAt: 1786141800,
+			unifiedWindows: {
+				five_hour: { utilization: 0.14, resetsAt: 1786141800, account: "private" },
+				seven_day: { utilization: 0.81, resetsAt: 1786400000 },
+				broken: { utilization: "secret" },
+			},
+		};
+		try { await consume(makeCtx(), [{ type: "rate_limit_event", rate_limit_info: info }]); }
+		finally { __test.setPiEvents(null); }
+		assert.deepStrictEqual(emitted[0].data, {
+			status: "allowed", utilization: 0.14, rateLimitType: "five_hour", resetsAt: 1786141800,
+			windows: {
+				five_hour: { utilization: 0.14, resetsAt: 1786141800 },
+				seven_day: { utilization: 0.81, resetsAt: 1786400000 },
+			},
+		});
+	});
+
 	it("ignores malformed rate-limit data", async () => {
 		const emitted = [];
 		__test.setPiEvents({ emit: (...args) => emitted.push(args) });

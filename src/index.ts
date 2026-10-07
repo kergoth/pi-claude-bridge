@@ -531,6 +531,19 @@ function resultErrorText(message: SDKMessage): string | undefined {
  *  Leading with "Claude rate limit" rather than appending keeps the phrase in any truncated
  *  render, and avoids the `<tool> failed (exit N):` shape that pi-subagents treats as a tool
  *  failure and refuses to retry. */
+// Account-wide utilization for every window the SDK reports, so consumers see the weekly
+// cap on turns whose headline rateLimitType is the five-hour window. Only plain numbers
+// are copied out; the rest of unifiedWindows is not ours to publish.
+function normalizeUnifiedWindows(raw: unknown): Record<string, { utilization: number; resetsAt?: number }> | undefined {
+	if (!raw || typeof raw !== "object") return undefined;
+	const out: Record<string, { utilization: number; resetsAt?: number }> = {};
+	for (const [id, w] of Object.entries(raw as Record<string, any>)) {
+		if (!Number.isFinite(w?.utilization)) continue;
+		out[id] = { utilization: w.utilization, ...(Number.isFinite(w.resetsAt) ? { resetsAt: w.resetsAt } : {}) };
+	}
+	return Object.keys(out).length ? out : undefined;
+}
+
 function describeRateLimitFailure(rejection: { rateLimitType?: string; resetsAt?: number }, failure: string): string {
 	const kind = rejection.rateLimitType ? ` (${rejection.rateLimitType})` : "";
 	const resets = rejection.resetsAt ? ` — resets ${new Date(rejection.resetsAt * 1000).toLocaleTimeString()}` : ""; // resetsAt: Unix seconds (unit undocumented in the SDK; observed)
@@ -1500,7 +1513,8 @@ async function consumeQuery(
 					...(typeof info.rateLimitType === "string" ? { rateLimitType: info.rateLimitType } : {}),
 					...(Number.isFinite(info.resetsAt) ? { resetsAt: info.resetsAt } : {}),
 				};
-				piEvents?.emit("claude-bridge/rate-limit/v1", normalized);
+				const windows = normalizeUnifiedWindows(info.unifiedWindows);
+				piEvents?.emit("claude-bridge/rate-limit/v1", windows ? { ...normalized, windows } : normalized);
 			}
 			if (info?.status === "rejected") {
 				// Held so the failure Claude Code sends next can be named as a rate limit.
